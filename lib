@@ -224,7 +224,7 @@ function Library:Window(opts)
         end
         -- floating dropdown (popup overlays; never reflows the page)
         function C:Dropdown(o)
-            C.order+=1;local cur=o.Default or (o.Options and o.Options[1])
+            C.order+=1;local function optlist() return (type(o.Options)=="function" and o.Options()) or o.Options or {} end;local cur=o.Default or optlist()[1]
             local wrap=Instance.new("Frame");wrap.Size=UDim2.new(1,0,0,0);wrap.AutomaticSize=Enum.AutomaticSize.Y;wrap.BackgroundTransparency=1;wrap.LayoutOrder=C.order;wrap.Parent=inner;vlist(wrap,6)
             if o.Name then local nl=txt(wrap,o.Name,11.5,T.Dim,FM);nl.Size=UDim2.new(1,0,0,14) end
             local chip=Instance.new("TextButton");chip.Size=UDim2.new(1,0,0,32);chip.BackgroundColor3=T.Ctrl;chip.AutoButtonColor=false;chip.Text="";chip.LayoutOrder=1;chip.Parent=wrap;corner(chip,8);local cs=stroke(chip,T.Line,1,0)
@@ -246,7 +246,7 @@ function Library:Window(opts)
                 catch.MouseButton1Click:Connect(close)
                 local off = gui.IgnoreGuiInset and Vector2.new(0,0) or GuiS:GetGuiInset()
                 local ap=chip.AbsolutePosition
-                local n=#(o.Options or {}); local popH=n*28 + math.max(0,n-1)*2 + 10
+                local ol0=optlist(); local n=#ol0; local popH=n*28 + math.max(0,n-1)*2 + 10
                 local ax=ap.X-off.X; local ty=ap.Y-off.Y+chip.AbsoluteSize.Y+6
                 pop=Instance.new("Frame");pop.BackgroundColor3=T.Panel;pop.BorderSizePixel=0;pop.ZIndex=190;pop.Size=UDim2.fromOffset(chip.AbsoluteSize.X,popH)
                 pop.Position=UDim2.fromOffset(ax,ty-6);pop.Parent=gui;corner(pop,9);stroke(pop,T.Edge,1,0.15)
