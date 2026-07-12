@@ -19,7 +19,7 @@
 
     ── QUICK START ─────────────────────────────────────────────────────────────
       local Lib = loadstring(readfile("LucidLib.luau"))()
-      local Win = Lib:Window({ Title="lucid", Key=Enum.KeyCode.RightShift })
+      local Win = Lib:Window({ Title="lucid.hub", Key=Enum.KeyCode.RightShift })
       local Tab = Win:Tab({ Title="Combat" })
       local Sub = Tab:SubTab({ Title="Aura" })
       local Sec = Sub:Section({ Side="Left", Title="Auto Attack" })
