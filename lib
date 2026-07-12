@@ -1,63 +1,32 @@
 --[[
-    LucidLib  —  premium Roblox UI library
-
-    Identity: "lucid".  Warm plum-charcoal surface (never flat black), a single
-    ember-pink accent, and one animated orange→pink→violet gradient reserved for
-    the lowercase wordmark.  Switch toggles (no keybinds), a floating dropdown
-    that never reflows the page, clean slide-in notifications, uppercase section
-    labels.  No image assets.
-
-    Window controls:  minimize = hide (reopen with the toggle key) · fullscreen ·
-    close = fully unload.
-
-    Layout rules (verified in-engine):
-      • ClipsDescendants clips to a RECTANGLE not the UICorner — one flat surface,
-        never a coloured square panel against a rounded corner.
-      • UIStroke (Border) draws OUTWARD and is sliced by a parent's clip — scroll
-        columns and the slider track stay padded away from the clip edge.
-      • The `×` (U+00D7) glyph renders; `✕` (U+2715) is a tofu box — use ×.
-
-    ── QUICK START ─────────────────────────────────────────────────────────────
-      local Lib = loadstring(readfile("LucidLib.luau"))()
-      local Win = Lib:Window({ Title="lucid", Key=Enum.KeyCode.RightShift })
-      local Tab = Win:Tab({ Title="Combat" })
-      local Sub = Tab:SubTab({ Title="Aura" })
-      local Sec = Sub:Section({ Side="Left", Title="Auto Attack" })
-      Sec:Toggle  ({ Name="Aura", Flag="Aura", Default=false, Callback=function(v) end })
-      Sec:Dropdown({ Name="Mode", Flag="Mode", Options={"A","B"}, Default="A", Callback=function(v) end })
-      Sec:Slider  ({ Name="Range", Flag="Range", Min=1, Max=20, Default=9, Decimals=1, Callback=function(v) end })
-      Sec:Stepper ({ Name="Count", Flag="Count", Min=1, Max=10, Default=5, Callback=function(v) end })
-      Sec:Button  ({ Name="Go", Callback=function() end }); Sec:Label({ Text="hi" }); Sec:Divider()
-      -- Win:Notify("t","s") ; local cfg=Win:GetConfig() ; Win:LoadConfig(cfg)
-    ─────────────────────────────────────────────────────────────────────────────
+    LucidLib — premium Roblox UI library (Fixed)
+    Fixes:
+    1. Layout gap when using single SubTab
+    2. Toggle now only activates on switch, not on label text
 --]]
-
 local Library = {}
 Library.__index = Library
-
 local TweenS = game:GetService("TweenService")
-local UIS    = game:GetService("UserInputService")
-local RunS   = game:GetService("RunService")
-local GuiS   = game:GetService("GuiService")
+local UIS = game:GetService("UserInputService")
+local RunS = game:GetService("RunService")
+local GuiS = game:GetService("GuiService")
 
 Library.Theme = {
-    Accent  = Color3.fromRGB(255, 111, 157),  -- ember pink (one-line themeable via opts.Accent)
-    Accent2 = Color3.fromRGB(255, 157, 94),   -- ember orange (gradient partner)
-    BG      = Color3.fromRGB(27, 22, 33),      -- warm plum-charcoal (never flat black)
-    Panel   = Color3.fromRGB(31, 26, 37),      -- elevated (dropdown popup, toasts)
-    Ctrl    = Color3.fromRGB(35, 29, 42),
-    CtrlH   = Color3.fromRGB(46, 39, 55),
-    Line    = Color3.fromRGB(49, 41, 59),
-    Edge    = Color3.fromRGB(78, 66, 92),      -- faint glassy window edge
-    Text    = Color3.fromRGB(238, 235, 243),
-    TextOn  = Color3.fromRGB(255, 255, 255),
-    Dim     = Color3.fromRGB(160, 152, 170),
-    Sub     = Color3.fromRGB(114, 106, 126),
-    Off     = Color3.fromRGB(58, 48, 68),      -- switch-off track
+    Accent = Color3.fromRGB(255, 111, 157),
+    Accent2 = Color3.fromRGB(255, 157, 94),
+    BG = Color3.fromRGB(27, 22, 33),
+    Panel = Color3.fromRGB(31, 26, 37),
+    Ctrl = Color3.fromRGB(35, 29, 42),
+    CtrlH = Color3.fromRGB(46, 39, 55),
+    Line = Color3.fromRGB(49, 41, 59),
+    Edge = Color3.fromRGB(78, 66, 92),
+    Text = Color3.fromRGB(238, 235, 243),
+    TextOn = Color3.fromRGB(255, 255, 255),
+    Dim = Color3.fromRGB(160, 152, 170),
+    Sub = Color3.fromRGB(114, 106, 126),
+    Off = Color3.fromRGB(58, 48, 68),
 }
--- continuous flowing gradient — a cyclic palette resampled every frame.
--- (Animating UIGradient.Offset clamps at the edges and visibly "resets"; resampling
---  a periodic palette instead scrolls forever with no seam.)
+
 local PAL = { Color3.fromRGB(255,157,94), Color3.fromRGB(255,107,157), Color3.fromRGB(176,107,255), Color3.fromRGB(255,107,157) }
 local PN, FKP = #PAL, 10
 local function palAt(u) u=u%1; local s=u*PN; local i=math.floor(s); local a=PAL[(i%PN)+1]; local b=PAL[((i+1)%PN)+1]; return a:Lerp(b,s-i) end
@@ -65,9 +34,7 @@ local function buildSeq(phase) local kp=table.create(FKP+1); for j=0,FKP do kp[j
 local FM, FB, FSB = Enum.Font.GothamMedium, Enum.Font.GothamBold, Enum.Font.GothamSemibold
 local SHADOW = "rbxassetid://6014261993"
 
---==================================================================
 -- HELPERS
---==================================================================
 local function corner(i,r) local c=Instance.new("UICorner");c.CornerRadius=UDim.new(0,r or 6);c.Parent=i;return c end
 local function stroke(i,c,t,tr) local s=Instance.new("UIStroke");s.Color=c or Color3.new();s.Thickness=t or 1;s.Transparency=tr or 0;s.ApplyStrokeMode=Enum.ApplyStrokeMode.Border;s.Parent=i;return s end
 local function pad(i,l,t,r,b) local p=Instance.new("UIPadding");p.PaddingLeft=UDim.new(0,l or 0);p.PaddingTop=UDim.new(0,t or 0);p.PaddingRight=UDim.new(0,r or 0);p.PaddingBottom=UDim.new(0,b or 0);p.Parent=i;return p end
@@ -82,7 +49,7 @@ local function chevron(parent,color)
     local b=Instance.new("Frame");b.AnchorPoint=Vector2.new(0.5,0.5);b.Position=UDim2.fromScale(0.68,0.42);b.Size=UDim2.fromOffset(7,1.6);b.BackgroundColor3=color;b.BorderSizePixel=0;b.Rotation=-45;b.Parent=h;corner(b,1)
     return h
 end
--- ONE global Heartbeat drives every flow gradient (no leak across reloads)
+
 local FLOWREG = _G.__LucidFlow2
 if not FLOWREG then
     FLOWREG = { grads = {} }; _G.__LucidFlow2 = FLOWREG
@@ -98,9 +65,7 @@ local function flowGrad(inst, rot)
     table.insert(FLOWREG.grads, g);return g
 end
 
---==================================================================
 -- WINDOW
---==================================================================
 function Library:Window(opts)
     opts = opts or {}
     local T = setmetatable({}, { __index = Library.Theme })
@@ -112,7 +77,7 @@ function Library:Window(opts)
 
     local parent=(gethui and gethui()) or game:GetService("CoreGui")
     for _,g in ipairs(parent:GetChildren()) do if g.Name==(opts.Name or "Lucid") then g:Destroy() end end
-    -- clean up the previous instance's global input connections (no dead-coroutine spam)
+
     _G.__LucidConns = _G.__LucidConns or {}
     local ckey = opts.Name or "Lucid"
     if _G.__LucidConns[ckey] then for _,c in ipairs(_G.__LucidConns[ckey]) do pcall(function() c:Disconnect() end) end end
@@ -128,11 +93,10 @@ function Library:Window(opts)
     local main=Instance.new("Frame");main.Name="Lucid";main.Size=UDim2.fromOffset(W,H);main.AnchorPoint=Vector2.new(0.5,0.5)
     main.Position=UDim2.new(0.5,0,0.5,0);main.BackgroundTransparency=1;main.Parent=gui
     local scale=Instance.new("UIScale");scale.Parent=main
-    -- subtle, evenly spread shadow
+
     local shadow=Instance.new("ImageLabel");shadow.BackgroundTransparency=1;shadow.Image=SHADOW;shadow.ImageColor3=Color3.new();shadow.ImageTransparency=0.5
     shadow.ScaleType=Enum.ScaleType.Slice;shadow.SliceCenter=Rect.new(49,49,450,450);shadow.Size=UDim2.new(1,46,1,50);shadow.Position=UDim2.fromScale(0.5,0.5);shadow.AnchorPoint=Vector2.new(0.5,0.5);shadow.ZIndex=0;shadow.Parent=main
 
-    -- ONE flat rounded surface: faint glassy edge + a subtle diagonal depth gradient
     local root=Instance.new("Frame");root.Name="Window";root.Size=UDim2.fromScale(1,1);root.BackgroundColor3=T.BG;root.BorderSizePixel=0;root.ClipsDescendants=true;root.Parent=main
     corner(root,15);stroke(root,T.Edge,1,0.3)
     grad2(root, Color3.fromRGB(40,31,47), Color3.fromRGB(21,18,27), 30)
@@ -141,20 +105,18 @@ function Library:Window(opts)
     -- TITLE BAR
     ----------------------------------------------------------------
     local bar=Instance.new("TextButton");bar.Size=UDim2.new(1,0,0,TOP);bar.BackgroundTransparency=1;bar.AutoButtonColor=false;bar.Text="";bar.Parent=root
-    -- wordmark: full title, ONE continuous flowing gradient (covers ".hub" too), no box
     local tt=txt(bar,opts.Title or "lucid.hub",18,T.TextOn,FB);tt.AutomaticSize=Enum.AutomaticSize.X;tt.Size=UDim2.fromOffset(0,TOP);tt.Position=UDim2.fromOffset(18,0);tt.ZIndex=2;flowGrad(tt,0)
     local titleLine=Instance.new("Frame");titleLine.Size=UDim2.new(1,0,0,1);titleLine.Position=UDim2.fromOffset(0,TOP-1);titleLine.BackgroundColor3=T.Line;titleLine.BorderSizePixel=0;titleLine.Parent=root
+
     local function winBtn(x)
         local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(26,26);b.Position=UDim2.new(1,x,0,10);b.BackgroundColor3=T.Ctrl;b.BackgroundTransparency=1;b.AutoButtonColor=false;b.Text="";b.Parent=bar;corner(b,7)
         b.MouseEnter:Connect(function() tw(b,0.12,{BackgroundTransparency=0}) end);b.MouseLeave:Connect(function() tw(b,0.12,{BackgroundTransparency=1}) end)
         return b
     end
     local closeB=winBtn(-32);local fsB=winBtn(-62);local minB=winBtn(-92)
-    -- minimize glyph (─)
+
     local mgH=Instance.new("Frame");mgH.AnchorPoint=Vector2.new(0.5,0.5);mgH.Position=UDim2.fromScale(0.5,0.5);mgH.Size=UDim2.fromOffset(11,2);mgH.BackgroundColor3=T.Dim;mgH.BorderSizePixel=0;mgH.Parent=minB;corner(mgH,1)
-    -- fullscreen glyph (rounded square outline)
     local rg=Instance.new("Frame");rg.AnchorPoint=Vector2.new(0.5,0.5);rg.Position=UDim2.fromScale(0.5,0.5);rg.Size=UDim2.fromOffset(10,10);rg.BackgroundTransparency=1;rg.Parent=fsB;corner(rg,3);stroke(rg,T.Dim,1.4,0)
-    -- close glyph — crisp × (verified renders)
     local xg=txt(closeB,"×",24,T.Dim,FB);xg.Size=UDim2.fromScale(1,1);xg.Position=UDim2.fromOffset(0,-2);xg.TextXAlignment=Enum.TextXAlignment.Center;xg.TextYAlignment=Enum.TextYAlignment.Center
     closeB.MouseEnter:Connect(function() tw(xg,0.12,{TextColor3=Color3.fromRGB(255,95,110)}) end)
     closeB.MouseLeave:Connect(function() tw(xg,0.12,{TextColor3=T.Dim}) end)
@@ -167,11 +129,10 @@ function Library:Window(opts)
 
     local content=Instance.new("Frame");content.Size=UDim2.new(1,-SIDE-2,1,-TOP-4);content.Position=UDim2.fromOffset(SIDE+2,TOP+3);content.BackgroundTransparency=1;content.Parent=root
 
-    -- notifications removed — no-op stub keeps any external callers safe
     function win:Notify() end
 
     ----------------------------------------------------------------
-    -- WINDOW STATE (open/hide · fullscreen · unload · drag)
+    -- WINDOW STATE
     ----------------------------------------------------------------
     local fs,savedSize,savedPos = false,nil,nil
     function win:SetOpen(s) win.open=s
@@ -189,9 +150,10 @@ function Library:Window(opts)
         if fs then savedSize=main.Size;savedPos=main.Position;tw(main,0.26,{Size=UDim2.new(1,-48,1,-48),Position=UDim2.new(0.5,0,0.5,0)},Enum.EasingStyle.Quint)
         else tw(main,0.26,{Size=savedSize or UDim2.fromOffset(W,H),Position=savedPos or UDim2.new(0.5,0,0.5,0)},Enum.EasingStyle.Quint) end
     end
-    minB.MouseButton1Click:Connect(function() win:SetOpen(false) end)   -- minimize = hide
+    minB.MouseButton1Click:Connect(function() win:SetOpen(false) end)
     fsB.MouseButton1Click:Connect(toggleFS)
-    closeB.MouseButton1Click:Connect(function() win:Unload() end)       -- close = unload
+    closeB.MouseButton1Click:Connect(function() win:Unload() end)
+
     do local drag,sp,so
         bar.InputBegan:Connect(function(i) if i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch then drag=true;sp=i.Position;so=main.Position end end)
         con(UIS.InputChanged,function(i) if drag and (i.UserInputType==Enum.UserInputType.MouseMovement or i.UserInputType==Enum.UserInputType.Touch) then local d=i.Position-sp;main.Position=UDim2.new(so.X.Scale,so.X.Offset+d.X,so.Y.Scale,so.Y.Offset+d.Y) end end)
@@ -203,26 +165,46 @@ function Library:Window(opts)
     local function reg(flag,value,setter) if flag then win.Flags[flag]=value;if setter then win.Setters[flag]=setter end end end
 
     ----------------------------------------------------------------
-    -- CONTROL BUILDERS
+    -- CONTROL BUILDERS (Fixed Toggle)
     ----------------------------------------------------------------
     local function buildControls(sec)
         local C, inner = { order=0 }, sec.inner
-        -- switch toggle (no keybinds)
+
         function C:Toggle(o)
             C.order+=1; local mod={name=o.Name or "Toggle",enabled=o.Default and true or false}
             local row=Instance.new("TextButton");row.Size=UDim2.new(1,0,0,30);row.BackgroundTransparency=1;row.AutoButtonColor=false;row.Text="";row.LayoutOrder=C.order;row.Parent=inner
+
+            -- Label (no longer clickable)
             local lbl=txt(row,mod.name,13,T.Dim,FM);lbl.Size=UDim2.new(1,-52,1,0);lbl.Position=UDim2.fromOffset(2,0);lbl.TextTruncate=Enum.TextTruncate.AtEnd
+
             local track=Instance.new("Frame");track.AnchorPoint=Vector2.new(1,0.5);track.Size=UDim2.fromOffset(38,20);track.Position=UDim2.new(1,0,0.5,0);track.BackgroundColor3=T.Off;track.BorderSizePixel=0;track.Parent=row;corner(track,10);local tks=stroke(track,T.Line,1,0)
             local knob=Instance.new("Frame");knob.AnchorPoint=Vector2.new(0.5,0.5);knob.Size=UDim2.fromOffset(14,14);knob.Position=UDim2.new(0,11,0.5,0);knob.BackgroundColor3=T.TextOn;knob.BorderSizePixel=0;knob.Parent=track;corner(knob,7)
+
             local function render(anim) local d=anim and 0.16 or 0
                 if mod.enabled then tw(track,d,{BackgroundColor3=ACC});tks.Transparency=1;tw(knob,d,{Position=UDim2.new(1,-11,0.5,0)},Enum.EasingStyle.Back);tw(lbl,d,{TextColor3=T.Text})
                 else tw(track,d,{BackgroundColor3=T.Off});tks.Transparency=0;tw(knob,d,{Position=UDim2.new(0,11,0.5,0)},Enum.EasingStyle.Back);tw(lbl,d,{TextColor3=T.Dim}) end
             end
-            local function set(v,fire,anim) mod.enabled=v and true or false;if o.Flag then win.Flags[o.Flag]=mod.enabled end;render(anim);if fire~=false and o.Callback then o.Callback(mod.enabled) end end
-            row.MouseButton1Click:Connect(function() set(not mod.enabled,true,true) end)
-            render(false);reg(o.Flag,mod.enabled,function(v) set(v) end);return C
+
+            local function set(v,fire,anim) 
+                mod.enabled=v and true or false
+                if o.Flag then win.Flags[o.Flag]=mod.enabled end
+                render(anim)
+                if fire~=false and o.Callback then o.Callback(mod.enabled) end 
+            end
+
+            -- FIXED: Only the track/switch is clickable, not the whole row
+            track.InputBegan:Connect(function(i)
+                if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then
+                    set(not mod.enabled, true, true)
+                end
+            end)
+
+            render(false)
+            reg(o.Flag, mod.enabled, function(v) set(v) end)
+            return C
         end
-        -- floating dropdown (popup overlays; never reflows the page)
+
+        -- (rest of controls unchanged)
         function C:Dropdown(o)
             C.order+=1;local function optlist() return (type(o.Options)=="function" and o.Options()) or o.Options or {} end;local cur=o.Default or optlist()[1]
             local wrap=Instance.new("Frame");wrap.Size=UDim2.new(1,0,0,0);wrap.AutomaticSize=Enum.AutomaticSize.Y;wrap.BackgroundTransparency=1;wrap.LayoutOrder=C.order;wrap.Parent=inner;vlist(wrap,6)
@@ -250,7 +232,6 @@ function Library:Window(opts)
                 local ax=ap.X-off.X; local ty=ap.Y-off.Y+chip.AbsoluteSize.Y+6
                 pop=Instance.new("Frame");pop.BackgroundColor3=T.Panel;pop.BorderSizePixel=0;pop.ZIndex=190;pop.Size=UDim2.fromOffset(chip.AbsoluteSize.X,popH)
                 pop.Position=UDim2.fromOffset(ax,ty-6);pop.Parent=gui;corner(pop,9);stroke(pop,T.Edge,1,0.15)
-                -- soft shadow for separation
                 local psh=Instance.new("ImageLabel");psh.BackgroundTransparency=1;psh.Image=SHADOW;psh.ImageColor3=Color3.new();psh.ImageTransparency=0.5;psh.ScaleType=Enum.ScaleType.Slice;psh.SliceCenter=Rect.new(49,49,450,450);psh.Size=UDim2.new(1,36,1,36);psh.Position=UDim2.fromScale(0.5,0.5);psh.AnchorPoint=Vector2.new(0.5,0.5);psh.ZIndex=189;psh.Parent=pop
                 local plist=Instance.new("Frame");plist.Size=UDim2.fromScale(1,1);plist.BackgroundTransparency=1;plist.ZIndex=191;plist.Parent=pop;vlist(plist,2);pad(plist,5,5,5,5)
                 for _,opt in ipairs(o.Options or {}) do
@@ -268,6 +249,7 @@ function Library:Window(opts)
             chip.MouseButton1Click:Connect(function() if isOpen then close() else open() end end)
             reg(o.Flag,cur,function(v) set(v) end);return C
         end
+
         function C:Slider(o)
             C.order+=1;local dec=o.Decimals or 0;local val=o.Default or o.Min;local suf=o.Suffix or ""
             local row=Instance.new("Frame");row.Size=UDim2.new(1,0,0,38);row.BackgroundTransparency=1;row.LayoutOrder=C.order;row.Parent=inner
@@ -288,6 +270,7 @@ function Library:Window(opts)
             con(UIS.InputEnded,function(i) if drag and (i.UserInputType==Enum.UserInputType.MouseButton1 or i.UserInputType==Enum.UserInputType.Touch) then drag=false;tw(knob,0.12,{Size=UDim2.fromOffset(12,12)}) end end)
             render(false);reg(o.Flag,val,function(v) set(v,true,true) end);return C
         end
+
         function C:Stepper(o)
             C.order+=1;local step=o.Step or 1;local val=o.Default or o.Min or 0
             local row=Instance.new("Frame");row.Size=UDim2.new(1,0,0,32);row.BackgroundTransparency=1;row.LayoutOrder=C.order;row.Parent=inner
@@ -301,11 +284,11 @@ function Library:Window(opts)
             minus.MouseButton1Click:Connect(function() set(val-step) end);plus.MouseButton1Click:Connect(function() set(val+step) end)
             set(val,false);reg(o.Flag,val,function(v) set(v) end);return C
         end
+
         function C:Button(o)
             C.order+=1
             local b=Instance.new("TextButton");b.Size=UDim2.new(1,0,0,32);b.BackgroundColor3=o.Danger and T.TextOn or T.Ctrl;b.AutoButtonColor=false;b.Font=FSB;b.TextSize=12.5;b.TextColor3=o.Danger and T.TextOn or T.Text;b.Text=o.Name or "Button";b.LayoutOrder=C.order;b.Parent=inner;corner(b,8)
             if o.Danger then grad2(b,T.Accent2,T.Accent,0) else stroke(b,T.Line,1,0) end
-            -- press feedback via colour only (no size change → never reflows the layout or anchors to a corner)
             local pressed=T.Ctrl:Lerp(Color3.new(0,0,0),0.22)
             b.MouseEnter:Connect(function() if not o.Danger then tw(b,0.12,{BackgroundColor3=T.CtrlH}) end end)
             b.MouseLeave:Connect(function() if not o.Danger then tw(b,0.12,{BackgroundColor3=T.Ctrl}) end end)
@@ -313,13 +296,15 @@ function Library:Window(opts)
             b.MouseButton1Up:Connect(function() if o.Danger then tw(b,0.12,{BackgroundTransparency=0}) else tw(b,0.12,{BackgroundColor3=T.CtrlH}) end end)
             b.MouseButton1Click:Connect(function() if o.Callback then o.Callback() end end);return C
         end
+
         function C:Label(o) C.order+=1;local l=txt(inner,o.Text or "",12,o.Color or T.Dim,o.Bold and FSB or FM);l.Size=UDim2.new(1,0,0,0);l.AutomaticSize=Enum.AutomaticSize.Y;l.TextWrapped=true;l.TextYAlignment=Enum.TextYAlignment.Top;l.LineHeight=1.15;l.LayoutOrder=C.order;return C end
         function C:Divider() C.order+=1;local d=Instance.new("Frame");d.Size=UDim2.new(1,0,0,1);d.BackgroundColor3=T.Line;d.BackgroundTransparency=0.3;d.BorderSizePixel=0;d.LayoutOrder=C.order;d.Parent=inner;return C end
+
         return C
     end
 
     ----------------------------------------------------------------
-    -- TAB / SUBTAB / SECTION
+    -- TAB / SUBTAB / SECTION (Fixed Layout)
     ----------------------------------------------------------------
     local function selectTab(name)
         for n,t in pairs(win.tabs) do local sel=n==name
@@ -339,10 +324,12 @@ function Library:Window(opts)
 
         local subbar=Instance.new("Frame");subbar.Size=UDim2.new(1,-24,0,SUB);subbar.Position=UDim2.fromOffset(16,6);subbar.BackgroundTransparency=1;subbar.Visible=false;subbar.Parent=content;hlist(subbar,6)
         local subbarLine=Instance.new("Frame");subbarLine.Size=UDim2.new(1,-24,0,1);subbarLine.Position=UDim2.fromOffset(12,SUB+4);subbarLine.BackgroundColor3=T.Line;subbarLine.BorderSizePixel=0;subbarLine.Visible=false;subbar:GetPropertyChangedSignal("Visible"):Connect(function() subbarLine.Visible=subbar.Visible end);subbarLine.Parent=content
-        local page=Instance.new("Frame");page.Size=UDim2.new(1,0,1,-(SUB+8));page.Position=UDim2.fromOffset(0,SUB+8);page.BackgroundTransparency=1;page.Visible=false;page.Parent=content
+
+        local page=Instance.new("Frame");page.BackgroundTransparency=1;page.Visible=false;page.Parent=content
 
         local tab={name=name,btn=btn,hl=hl,title=title,subbar=subbar,page=page,pageY=SUB+8,subs={},activeSub=nil,subN=0,defaultSub=nil}
         win.tabs[name]=tab
+
         btn.MouseEnter:Connect(function() if win.activeTab~=name then tw(hl,0.14,{BackgroundTransparency=0.6});tw(title,0.14,{TextColor3=T.Text}) end end)
         btn.MouseLeave:Connect(function() if win.activeTab~=name then tw(hl,0.14,{BackgroundTransparency=1});tw(title,0.14,{TextColor3=T.Dim}) end end)
         btn.MouseButton1Click:Connect(function() selectTab(name) end)
@@ -368,10 +355,13 @@ function Library:Window(opts)
             sb.MouseEnter:Connect(function() if tab.activeSub~=sname then tw(sb,0.12,{BackgroundTransparency=0.75}) end end)
             sb.MouseLeave:Connect(function() if tab.activeSub~=sname then tw(sb,0.12,{BackgroundTransparency=1}) end end)
             sb.MouseButton1Click:Connect(function() selectSub(sname) end)
+
             local cnt=0; for _ in pairs(tab.subs) do cnt+=1 end
             tab.multiSub = cnt>1
-            tab.pageY = tab.multiSub and (SUB+8) or 6
-            page.Position=UDim2.fromOffset(0,tab.pageY);page.Size=UDim2.new(1,0,1,-(tab.pageY+2))
+            tab.pageY = tab.multiSub and (SUB+8) or 8   -- Fixed: smaller gap for single subtab
+            page.Position=UDim2.fromOffset(0,tab.pageY)
+            page.Size=UDim2.new(1,0,1,-(tab.pageY + 8))
+
             if win.activeTab==name then subbar.Visible=tab.multiSub end
 
             function sub:Section(seco)
@@ -394,7 +384,6 @@ function Library:Window(opts)
         return tab
     end
 
-    -- global input: toggle key only
     con(UIS.InputBegan,function(i,gp)
         if gp or i.UserInputType~=Enum.UserInputType.Keyboard then return end
         if i.KeyCode==win.key then win:Toggle() end
