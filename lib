@@ -19,7 +19,7 @@
 
     ── QUICK START ─────────────────────────────────────────────────────────────
       local Lib = loadstring(readfile("LucidLib.luau"))()
-      local Win = Lib:Window({ Title="lucid.hub", Key=Enum.KeyCode.RightShift })
+      local Win = Lib:Window({ Title="lucid", Key=Enum.KeyCode.RightShift })
       local Tab = Win:Tab({ Title="Combat" })
       local Sub = Tab:SubTab({ Title="Aura" })
       local Sec = Sub:Section({ Side="Left", Title="Auto Attack" })
@@ -103,8 +103,7 @@ end
 --==================================================================
 function Library:Window(opts)
     opts = opts or {}
-    local T = setmetatable({}, { __index = Library.Theme })
-    if opts.Accent then T.Accent = opts.Accent end
+    local T = setmetatable({}, { __index = Library.Theme })   -- hardbaked theme (private hub, not customizable)
     local ACC = T.Accent
 
     local win = { Theme=T, Flags={}, Setters={}, open=true,
@@ -132,17 +131,21 @@ function Library:Window(opts)
     local shadow=Instance.new("ImageLabel");shadow.BackgroundTransparency=1;shadow.Image=SHADOW;shadow.ImageColor3=Color3.new();shadow.ImageTransparency=0.5
     shadow.ScaleType=Enum.ScaleType.Slice;shadow.SliceCenter=Rect.new(49,49,450,450);shadow.Size=UDim2.new(1,46,1,50);shadow.Position=UDim2.fromScale(0.5,0.5);shadow.AnchorPoint=Vector2.new(0.5,0.5);shadow.ZIndex=0;shadow.Parent=main
 
-    -- ONE flat rounded surface: faint glassy edge + a subtle diagonal depth gradient
+    -- ONE flat rounded surface: faint glassy edge + a rich diagonal background gradient (theme, not flat black)
     local root=Instance.new("Frame");root.Name="Window";root.Size=UDim2.fromScale(1,1);root.BackgroundColor3=T.BG;root.BorderSizePixel=0;root.ClipsDescendants=true;root.Parent=main
     corner(root,15);stroke(root,T.Edge,1,0.3)
-    grad2(root, Color3.fromRGB(40,31,47), Color3.fromRGB(21,18,27), 30)
+    do local bgg=Instance.new("UIGradient");bgg.Rotation=120;bgg.Color=ColorSequence.new({
+        ColorSequenceKeypoint.new(0.00, Color3.fromRGB(48,33,58)),
+        ColorSequenceKeypoint.new(0.50, Color3.fromRGB(27,21,33)),
+        ColorSequenceKeypoint.new(1.00, Color3.fromRGB(37,23,30)),
+    });bgg.Parent=root end
 
     ----------------------------------------------------------------
     -- TITLE BAR
     ----------------------------------------------------------------
     local bar=Instance.new("TextButton");bar.Size=UDim2.new(1,0,0,TOP);bar.BackgroundTransparency=1;bar.AutoButtonColor=false;bar.Text="";bar.Parent=root
-    -- wordmark: full title, ONE continuous flowing gradient (covers ".hub" too), no box
-    local tt=txt(bar,opts.Title or "lucid.hub",18,T.TextOn,FB);tt.AutomaticSize=Enum.AutomaticSize.X;tt.Size=UDim2.fromOffset(0,TOP);tt.Position=UDim2.fromOffset(18,0);tt.ZIndex=2;flowGrad(tt,0)
+    -- wordmark: HARDBAKED "lucid.hub" (private hub — not customizable), one flowing gradient
+    local tt=txt(bar,"lucid.hub",18,T.TextOn,FB);tt.AutomaticSize=Enum.AutomaticSize.X;tt.Size=UDim2.fromOffset(0,TOP);tt.Position=UDim2.fromOffset(18,0);tt.ZIndex=2;flowGrad(tt,0)
     local titleLine=Instance.new("Frame");titleLine.Size=UDim2.new(1,0,0,1);titleLine.Position=UDim2.fromOffset(0,TOP-1);titleLine.BackgroundColor3=T.Line;titleLine.BorderSizePixel=0;titleLine.Parent=root
     local function winBtn(x)
         local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(26,26);b.Position=UDim2.new(1,x,0,10);b.BackgroundColor3=T.Ctrl;b.BackgroundTransparency=1;b.AutoButtonColor=false;b.Text="";b.Parent=bar;corner(b,7)
@@ -222,46 +225,46 @@ function Library:Window(opts)
             row.MouseButton1Click:Connect(function() set(not mod.enabled,true,true) end)
             render(false);reg(o.Flag,mod.enabled,function(v) set(v) end);return C
         end
-        -- floating dropdown (popup overlays; never reflows the page)
+        -- floating-overlay dropdown: opens as ONE connected rounded panel that floats OVER the content below (no push)
         function C:Dropdown(o)
             C.order+=1;local function optlist() return (type(o.Options)=="function" and o.Options()) or o.Options or {} end;local cur=o.Default or optlist()[1]
             local wrap=Instance.new("Frame");wrap.Size=UDim2.new(1,0,0,0);wrap.AutomaticSize=Enum.AutomaticSize.Y;wrap.BackgroundTransparency=1;wrap.LayoutOrder=C.order;wrap.Parent=inner;vlist(wrap,6)
             if o.Name then local nl=txt(wrap,o.Name,11.5,T.Dim,FM);nl.Size=UDim2.new(1,0,0,14) end
+            -- closed-state chip (stays in the flow, reserves only its own 32px)
             local chip=Instance.new("TextButton");chip.Size=UDim2.new(1,0,0,32);chip.BackgroundColor3=T.Ctrl;chip.AutoButtonColor=false;chip.Text="";chip.LayoutOrder=1;chip.Parent=wrap;corner(chip,8);local cs=stroke(chip,T.Line,1,0)
             local vt=txt(chip,tostring(cur),12.5,T.Text,FM);vt.Size=UDim2.new(1,-40,1,0);vt.Position=UDim2.fromOffset(13,0)
             local cev=chevron(chip,T.Dim);cev.AnchorPoint=Vector2.new(0.5,0.5);cev.Position=UDim2.new(1,-15,0.5,0)
-            local isOpen,pop,catch = false,nil,nil
+            local isOpen,panel,catch = false,nil,nil
             local function set(v,fire) cur=v;vt.Text=tostring(v);if o.Flag then win.Flags[o.Flag]=v end;if fire~=false and o.Callback then o.Callback(v) end end
             local function close()
                 isOpen=false;if win._closeDrop==close then win._closeDrop=nil end
                 tw(cev,0.16,{Rotation=0});tw(cs,0.12,{Color=T.Line})
                 if catch then catch:Destroy();catch=nil end
-                if pop then local p=pop;pop=nil;tw(p,0.12,{BackgroundTransparency=1});task.delay(0.13,function() p:Destroy() end) end
+                if panel then local pn=panel;panel=nil;tw(pn,0.14,{Size=UDim2.fromOffset(pn.AbsoluteSize.X,32)});task.delay(0.15,function() pn:Destroy() end) end
             end
             local function open()
                 if win._closeDrop then win._closeDrop() end
-                isOpen=true;win._closeDrop=close
-                tw(cev,0.18,{Rotation=180});tw(cs,0.12,{Color=ACC})
-                catch=Instance.new("TextButton");catch.Size=UDim2.fromScale(1,1);catch.BackgroundTransparency=1;catch.Text="";catch.AutoButtonColor=false;catch.ZIndex=180;catch.Parent=gui
+                isOpen=true;win._closeDrop=close;tw(cev,0.18,{Rotation=180});tw(cs,0.12,{Color=ACC})
+                local opts=optlist();local n=#opts;local listH=n*28+math.max(0,n-1)*2+13
+                local ap=chip.AbsolutePosition;local rp=root.AbsolutePosition;local px,py=ap.X-rp.X, ap.Y-rp.Y
+                -- click-catcher (inside the window, just under the panel) closes on outside click
+                catch=Instance.new("TextButton");catch.Size=UDim2.fromScale(1,1);catch.BackgroundTransparency=1;catch.Text="";catch.AutoButtonColor=false;catch.ZIndex=188;catch.Parent=root
                 catch.MouseButton1Click:Connect(close)
-                local off = gui.IgnoreGuiInset and Vector2.new(0,0) or GuiS:GetGuiInset()
-                local ap=chip.AbsolutePosition
-                local ol0=optlist(); local n=#ol0; local popH=n*28 + math.max(0,n-1)*2 + 10
-                local ax=ap.X-off.X; local ty=ap.Y-off.Y+chip.AbsoluteSize.Y+6
-                pop=Instance.new("Frame");pop.BackgroundColor3=T.Panel;pop.BorderSizePixel=0;pop.ZIndex=190;pop.Size=UDim2.fromOffset(chip.AbsoluteSize.X,popH)
-                pop.Position=UDim2.fromOffset(ax,ty-6);pop.Parent=gui;corner(pop,9);stroke(pop,T.Edge,1,0.15)
-                -- soft shadow for separation
-                local psh=Instance.new("ImageLabel");psh.BackgroundTransparency=1;psh.Image=SHADOW;psh.ImageColor3=Color3.new();psh.ImageTransparency=0.5;psh.ScaleType=Enum.ScaleType.Slice;psh.SliceCenter=Rect.new(49,49,450,450);psh.Size=UDim2.new(1,36,1,36);psh.Position=UDim2.fromScale(0.5,0.5);psh.AnchorPoint=Vector2.new(0.5,0.5);psh.ZIndex=189;psh.Parent=pop
-                local plist=Instance.new("Frame");plist.Size=UDim2.fromScale(1,1);plist.BackgroundTransparency=1;plist.ZIndex=191;plist.Parent=pop;vlist(plist,2);pad(plist,5,5,5,5)
-                for _,opt in ipairs(o.Options or {}) do
-                    local sel = opt==cur
+                -- one rounded panel = header (mirrors the chip) + divider + options, floats over everything below
+                panel=Instance.new("Frame");panel.BackgroundColor3=T.Ctrl;panel.BorderSizePixel=0;panel.ClipsDescendants=true;panel.ZIndex=190;panel.Size=UDim2.fromOffset(chip.AbsoluteSize.X,32);panel.Position=UDim2.fromOffset(px,py);panel.Parent=root;corner(panel,8);stroke(panel,ACC,1,0)
+                local hv=txt(panel,tostring(cur),12.5,T.Text,FM);hv.Size=UDim2.new(1,-40,0,32);hv.Position=UDim2.fromOffset(13,0);hv.ZIndex=191
+                local hc=chevron(panel,T.Dim);hc.Rotation=180;hc.AnchorPoint=Vector2.new(0.5,0.5);hc.Position=UDim2.new(1,-15,0,16);hc.ZIndex=191
+                local dv=Instance.new("Frame");dv.Size=UDim2.new(1,-16,0,1);dv.Position=UDim2.fromOffset(8,32);dv.BackgroundColor3=T.Line;dv.BorderSizePixel=0;dv.ZIndex=191;dv.Parent=panel
+                local plist=Instance.new("Frame");plist.Size=UDim2.new(1,-10,0,0);plist.Position=UDim2.fromOffset(5,39);plist.AutomaticSize=Enum.AutomaticSize.Y;plist.BackgroundTransparency=1;plist.ZIndex=191;plist.Parent=panel;vlist(plist,2)
+                for _,opt in ipairs(opts) do
+                    local sel=opt==cur
                     local ob=Instance.new("TextButton");ob.Size=UDim2.new(1,0,0,28);ob.BackgroundColor3=T.CtrlH;ob.BackgroundTransparency=1;ob.AutoButtonColor=false;ob.Text="";ob.ZIndex=191;ob.Parent=plist;corner(ob,6)
-                    local ol=txt(ob,tostring(opt),12.5,sel and ACC or T.Dim,sel and FSB or FM);ol.Size=UDim2.new(1,-20,1,0);ol.Position=UDim2.fromOffset(11,0);ol.ZIndex=192
+                    local ol=txt(ob,tostring(opt),12.5,sel and ACC or T.Dim,sel and FSB or FM);ol.Size=UDim2.new(1,-16,1,0);ol.Position=UDim2.fromOffset(9,0);ol.ZIndex=192
                     ob.MouseEnter:Connect(function() if opt~=cur then tw(ob,0.1,{BackgroundTransparency=0});ol.TextColor3=T.Text end end)
                     ob.MouseLeave:Connect(function() if opt~=cur then tw(ob,0.1,{BackgroundTransparency=1});ol.TextColor3=T.Dim end end)
                     ob.MouseButton1Click:Connect(function() set(opt);close() end)
                 end
-                pop.BackgroundTransparency=1;tw(pop,0.15,{BackgroundTransparency=0,Position=UDim2.fromOffset(ax,ty)},Enum.EasingStyle.Quint)
+                tw(panel,0.2,{Size=UDim2.fromOffset(chip.AbsoluteSize.X,32+listH)},Enum.EasingStyle.Quint)
             end
             chip.MouseEnter:Connect(function() if not isOpen then tw(cs,0.12,{Color=T.Edge}) end end)
             chip.MouseLeave:Connect(function() if not isOpen then tw(cs,0.12,{Color=T.Line}) end end)
@@ -326,7 +329,7 @@ function Library:Window(opts)
             t.subbar.Visible=sel and (t.multiSub==true);t.page.Visible=sel
             tw(t.hl,0.16,{BackgroundTransparency=sel and 0 or 1})
             tw(t.title,0.16,{TextColor3=sel and T.TextOn or T.Dim})
-            if sel then t.page.Position=UDim2.fromOffset(8,t.pageY);tw(t.page,0.22,{Position=UDim2.fromOffset(0,t.pageY)},Enum.EasingStyle.Quint) end
+            if sel then t.page.Position=UDim2.fromOffset(0,t.pageY) end
         end
         win.activeTab=name
     end
@@ -335,13 +338,13 @@ function Library:Window(opts)
         o=o or {};local name=o.Title or "Tab";win.tabN+=1
         local btn=Instance.new("TextButton");btn.Size=UDim2.new(1,0,0,38);btn.BackgroundTransparency=1;btn.AutoButtonColor=false;btn.Text="";btn.LayoutOrder=win.tabN;btn.Parent=tabList
         local hl=Instance.new("Frame");hl.Size=UDim2.fromScale(1,1);hl.BackgroundColor3=T.Ctrl;hl.BackgroundTransparency=1;hl.BorderSizePixel=0;hl.Parent=btn;corner(hl,9)
-        local title=txt(btn,name,13.5,T.Dim,FSB);title.Size=UDim2.new(1,-28,1,0);title.Position=UDim2.fromOffset(14,0);title.TextYAlignment=Enum.TextYAlignment.Center
+        local title=txt(btn,name,15.5,T.Dim,FSB);title.Size=UDim2.new(1,-28,1,0);title.Position=UDim2.fromOffset(14,0);title.TextYAlignment=Enum.TextYAlignment.Center
 
         local subbar=Instance.new("Frame");subbar.Size=UDim2.new(1,-24,0,SUB);subbar.Position=UDim2.fromOffset(16,6);subbar.BackgroundTransparency=1;subbar.Visible=false;subbar.Parent=content;hlist(subbar,6)
         local subbarLine=Instance.new("Frame");subbarLine.Size=UDim2.new(1,-24,0,1);subbarLine.Position=UDim2.fromOffset(12,SUB+4);subbarLine.BackgroundColor3=T.Line;subbarLine.BorderSizePixel=0;subbarLine.Visible=false;subbar:GetPropertyChangedSignal("Visible"):Connect(function() subbarLine.Visible=subbar.Visible end);subbarLine.Parent=content
         local page=Instance.new("Frame");page.Size=UDim2.new(1,0,1,-(SUB+8));page.Position=UDim2.fromOffset(0,SUB+8);page.BackgroundTransparency=1;page.Visible=false;page.Parent=content
 
-        local tab={name=name,btn=btn,hl=hl,title=title,subbar=subbar,page=page,pageY=SUB+8,subs={},activeSub=nil,subN=0,defaultSub=nil}
+        local tab={name=name,btn=btn,hl=hl,title=title,subbar=subbar,page=page,pageY=6,subs={},activeSub=nil,subN=0,defaultSub=nil}
         win.tabs[name]=tab
         btn.MouseEnter:Connect(function() if win.activeTab~=name then tw(hl,0.14,{BackgroundTransparency=0.6});tw(title,0.14,{TextColor3=T.Text}) end end)
         btn.MouseLeave:Connect(function() if win.activeTab~=name then tw(hl,0.14,{BackgroundTransparency=1});tw(title,0.14,{TextColor3=T.Dim}) end end)
