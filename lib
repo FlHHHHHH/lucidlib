@@ -103,6 +103,16 @@ end
 --==================================================================
 function Library:Window(opts)
     opts = opts or {}
+    -- supported-games gate: if SupportedPlaces is given and this PlaceId isn't in it, kick the user.
+    -- (The allowlist will be populated later; omit SupportedPlaces to allow every game.)
+    if opts.SupportedPlaces then
+        local ok=false
+        for _,id in ipairs(opts.SupportedPlaces) do if game.PlaceId==id then ok=true break end end
+        if not ok then
+            pcall(function() game:GetService("Players").LocalPlayer:Kick(opts.KickReason or "lucid.hub does not support this game.") end)
+            local stub; stub=setmetatable({},{__index=function() return function() return stub end end});return stub -- no-op so chained calls don't error pre-kick
+        end
+    end
     local T = setmetatable({}, { __index = Library.Theme })   -- hardbaked theme (private hub, not customizable)
     local ACC = T.Accent
 
@@ -144,8 +154,15 @@ function Library:Window(opts)
     -- TITLE BAR
     ----------------------------------------------------------------
     local bar=Instance.new("TextButton");bar.Size=UDim2.new(1,0,0,TOP);bar.BackgroundTransparency=1;bar.AutoButtonColor=false;bar.Text="";bar.Parent=root
-    -- wordmark: HARDBAKED "lucid.hub" (private hub — not customizable), one flowing gradient
-    local tt=txt(bar,"lucid.hub",18,T.TextOn,FB);tt.AutomaticSize=Enum.AutomaticSize.X;tt.Size=UDim2.fromOffset(0,TOP);tt.Position=UDim2.fromOffset(18,0);tt.ZIndex=2;flowGrad(tt,0)
+    -- wordmark "lucid.hub" (hardbaked) + auto game-name subtitle — reads like a hub header
+    local titleBox=Instance.new("Frame");titleBox.BackgroundTransparency=1;titleBox.AutomaticSize=Enum.AutomaticSize.X;titleBox.Size=UDim2.fromOffset(0,TOP);titleBox.Position=UDim2.fromOffset(18,0);titleBox.ZIndex=2;titleBox.Parent=bar;hlist(titleBox,8)
+    local tt=txt(titleBox,"lucid.hub",18,T.TextOn,FB);tt.AutomaticSize=Enum.AutomaticSize.X;tt.Size=UDim2.fromOffset(0,TOP);tt.ZIndex=2;tt.LayoutOrder=0;flowGrad(tt,0)
+    local subT=txt(titleBox,"",13,T.Sub,FM);subT.AutomaticSize=Enum.AutomaticSize.X;subT.Size=UDim2.fromOffset(0,TOP);subT.ZIndex=2;subT.LayoutOrder=1;subT.Visible=false
+    task.spawn(function()   -- async: fetch this place's name (falls back to opts.Game)
+        local ok,info=pcall(function() return game:GetService("MarketplaceService"):GetProductInfo(game.PlaceId) end)
+        local nm=(ok and info and info.Name) or opts.Game
+        if nm and nm~="" then subT.Text="· "..nm;subT.Visible=true end
+    end)
     local titleLine=Instance.new("Frame");titleLine.Size=UDim2.new(1,0,0,1);titleLine.Position=UDim2.fromOffset(0,TOP-1);titleLine.BackgroundColor3=T.Line;titleLine.BorderSizePixel=0;titleLine.Parent=root
     local function winBtn(x)
         local b=Instance.new("TextButton");b.Size=UDim2.fromOffset(26,26);b.Position=UDim2.new(1,x,0,10);b.BackgroundColor3=T.Ctrl;b.BackgroundTransparency=1;b.AutoButtonColor=false;b.Text="";b.Parent=bar;corner(b,7)
@@ -397,10 +414,11 @@ function Library:Window(opts)
         return tab
     end
 
-    -- global input: toggle key only
-    con(UIS.InputBegan,function(i,gp)
-        if gp or i.UserInputType~=Enum.UserInputType.Keyboard then return end
-        if i.KeyCode==win.key then win:Toggle() end
+    -- global input: toggle key. Fire even when the game "processes" the key (shift-lock etc.)
+    -- so the UI still toggles; only skip while typing in a text box.
+    con(UIS.InputBegan,function(i)
+        if i.UserInputType~=Enum.UserInputType.Keyboard then return end
+        if i.KeyCode==win.key and not UIS:GetFocusedTextBox() then win:Toggle() end
     end)
 
     win:SetOpen(true)
